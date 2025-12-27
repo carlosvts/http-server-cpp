@@ -1,4 +1,7 @@
 #include <iostream>
+#include <sstream>
+#include <fstream>
+
 #include "server.hpp"
 
 HttpServer::HttpServer(const std::string &PORT)
@@ -63,9 +66,133 @@ int HttpServer::setup()
     return EXIT_SUCCESS;
 }
 
-void HttpServer::handleRequest(int clientSocket)
+int HttpServer::handleRequest(int clientSocket)
 {
-    ;
+    
+    // thinking of sckt as a external guard and newSckt (clientSocket) as the bartender inside the show
+    // now we use recv and send functions (they work with array buffers
+    std::vector<char> buffer;
+    buffer.resize(1024);
+
+    // recv takes a socket, a buffer to put data into, the maximum lenght of buffer and flags
+    // flag 0 is default
+    // receives in bytes the client request
+    // recv always receive the same format [METHOD] [SPACE] [PATH] [SPACE] [VERSION]
+    // then header files like Host: localhost:8080, User-Agent: firefox
+    // finally some data (if exists)
+    int bytesRead = recv(clientSocket, buffer.data(), buffer.size(), 0);
+    if (bytesRead == -1)
+    {
+        std::cerr << "Error while writing to buffer " << errno << std::endl;
+        return EXIT_FAILURE;
+    }
+    
+    // after receving, we sent a response
+    // we send in this pattern (three lines)
+    // 1. HTTP/1.1 [STATUS_CODE] [TEXT]
+    // 2. headers like Content-Type, Content-Lenght
+    // 3. text (data, bytes, video, etc)
+    std::string request {buffer.begin(), (buffer.begin() + bytesRead)};
+    
+    // Parsing client request
+    std::stringstream ss(request);
+    std::string method, path, protocol;
+    //  operator>> stops on spaces, so this work
+    ss >> method >> path >> protocol;
+    
+    // PATHS
+    if (path == "/") { path = "/index.html"; }
+    if (path == "/api/user-agent") 
+    {
+        std::string searchKey = "User-Agent: ";
+        std::string userAgent;
+        size_t startPos = request.find(searchKey); // returns pointer to first occurance
+        if(startPos != std::string::npos)
+        {
+            startPos += searchKey.length();
+            size_t endPos = request.find("\r");
+            userAgent = request.substr(startPos, endPos - startPos);
+        }
+        // now we prepare and send a response
+        std::string response = "User-Agent: " + userAgent;
+        std::string header = "HTTP/1.1 200 OK\r\n";
+        header += "Content-Type: text/plain; charset=utf-8\r\n";
+        header += "Content-Length: " + std::to_string(response.size()) + "\r\n";
+        header += "\r\n";
+
+        // send response
+        int headerBytesSent = send(clientSocket, header.c_str(), header.size(), 0);
+        if (headerBytesSent == -1)
+        {
+            std::cerr << "Error while returning response " << errno << std::endl;
+            return EXIT_FAILURE;
+        }
+
+        int dataBytesSent = send(clientSocket, response.data(), response.size(), 0);    
+        if (dataBytesSent == -1)
+        {
+            std::cerr << "Error while returning response " << errno << std::endl;
+            return EXIT_FAILURE;    
+        }
+        return EXIT_SUCCESS;
+    }
+    std::string localPath = path.substr(1); // Gets a substring starting at index 1 (i.e, eliminates the backslash)
+    
+
+
+    // Reading binary            read binary         point to the end of the file
+    std::ifstream file(localPath, std::ios::binary | std::ios::ate);
+    
+    if (!file.is_open())
+    {
+        // basic not found
+        std::string response = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n";
+        send(clientSocket, response.c_str(), response.size(), 0);
+        return EXIT_FAILURE;
+    }
+    
+    std::streamsize fileSize = file.tellg();
+    file.seekg(0, std::ios::beg);
+    
+    // creating a out buffer
+    std::vector<char> fileBuffer;
+    fileBuffer.resize(fileSize);
+
+    // populating buffer with data
+    if (!file.read(fileBuffer.data(), fileSize))
+    {
+        return EXIT_FAILURE;
+    }
+    // Preparing the MIME type
+    std::string header = "HTTP/1.1 200 OK\r\n";
+    std::string extension = localPath.substr(localPath.find_last_of(".")); // last occuerence of "."
+    std::string mimeType = "text/plain";
+
+    if (extension == ".html") { mimeType = "text/html"; }
+    else if (extension == ".css") { mimeType = "text/css"; }
+    else if (extension == ".png") { mimeType = "image/png"; }
+    else if (extension == ".jpg" || extension == ".jpeg") { mimeType = "image/jpeg"; }
+
+    // now that MIME is parsed, we send the response
+    header += "Content-Type: " + mimeType + "\r\n";
+    header += "Content-Length: " + std::to_string(fileSize) + "\r\n";
+    header += "\r\n";
+
+    // sending header and data
+    int headerBytesSent = send(clientSocket, header.c_str(), header.size(), 0);
+    if (headerBytesSent == -1)
+    {
+        std::cerr << "Error while returning response " << errno << std::endl;
+        return EXIT_FAILURE;
+    }
+
+    int dataBytesSent = send(clientSocket, fileBuffer.data(), fileBuffer.size(), 0);    
+    if (dataBytesSent == -1)
+    {
+        std::cerr << "Error while returning response " << errno << std::endl;
+        return EXIT_FAILURE;    
+    }
+    return EXIT_SUCCESS;
 }
 
 int HttpServer::run()
@@ -88,28 +215,8 @@ int HttpServer::run()
             return EXIT_FAILURE;
         }
 
-        // thinking of sckt as a external guard and newSckt as the bartender inside the show
-        // now we use recv and send functions (they work with array buffers
-        std::vector<char> buffer;
-        buffer.resize(1024);
-        // recv takes a socket, a buffer to put data into, the maximum lenght of buffer and flags
-        // flag 0 is default
-        int bytesRead = recv(newSckt, buffer.data(), buffer.size(), 0);
-        if (bytesRead == -1)
-        {
-            std::cerr << "Error while writing to buffer " << errno << std::endl;
-            return EXIT_FAILURE;
-        }
+        handleRequest(newSckt);
 
-        // after receving, we sent a response
-        std::string msg = "HTTP/1.1 200 OK \r\n" "Content-Type: text/plain\r\n" "Content-Length: 12\r\n" "\r\n" "Hello World!";
-        int bytesSent {};
-        bytesSent = send(newSckt, msg.c_str(), msg.size(), 0);
-        if (bytesSent == -1)
-        {
-            std::cerr << "Error while returning response " << errno << std::endl;
-            return EXIT_FAILURE;
-        }
         // closes the files descriptors
         close(newSckt);
         }

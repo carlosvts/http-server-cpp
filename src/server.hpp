@@ -32,6 +32,6 @@ class HttpServer
         // setup logic for socket -> bind -> listen
         int setup();
         // handles http connection
-        void handleRequest(int clientSocket);
+        int handleRequest(int clientSocket);
 };
 #endif
