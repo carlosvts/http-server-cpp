@@ -99,9 +99,64 @@ int HttpServer::handleRequest(int clientSocket)
     std::string method, path, protocol;
     //  operator>> stops on spaces, so this work
     ss >> method >> path >> protocol;
+
+    // if has a questionmark, we can check
+    size_t questionMark = path.find("?");
+    // Make a route cutting until it sees the questionmark
+    std::string routedPath = path.substr(0, questionMark); 
+    if (routedPath == "/api/salute")
+    {
+        // GET api/salute?name=Foo&age=Bar HTTP/1.1\r\n ... 
+        // path api/salute?name=Foo&age=Bar
+        std::string name = "User";
+        std::string age = "Unknown";
+        if (questionMark != std::string::npos)
+        {
+            std::string queryParams = path.substr(questionMark + 1); //substring at index of ? + 1 ie name=Foo&age=Bar
+            std::stringstream queryss(queryParams);
+            std::string slice;
+            while(std::getline(queryss, slice, '&'))
+            {
+                size_t sep = slice.find('=');
+                if (sep != std::string::npos)
+                {
+                    std::string key = slice.substr(0, sep);
+                    if (key == "name")
+                    {
+                        name = slice.substr(sep + 1); 
+                    }
+                    else if (key == "age")
+                    {
+                        age = slice.substr(sep + 1);
+                    }
+                }
+            }
+        }
+        std::string header = "HTTP/1.1 200 OK\r\n";
+        // std::string body = name + age;
+        std::string responseBody = "<h1> Hello " + name + "!<br> Your age is: " + age + "</h1>";
+        header += "Content-Type: text/html; charset=utf-8\r\n";
+        header += "Content-Length: " + std::to_string(responseBody.size()) + "\r\n";
+        header += "\r\n"; 
+
+
+        int saluteHeaderBytesSent = send(clientSocket, header.c_str(), header.size(), 0);
+        if (saluteHeaderBytesSent == -1)
+        {
+            std::cerr << "Error while returning response " << errno << std::endl;
+            return EXIT_FAILURE;
+        }
+        int saluteBodyBytesSent = send(clientSocket, responseBody.c_str(), responseBody.size(), 0);
+        if (saluteBodyBytesSent == -1)
+        {
+            std::cerr << "Error while returning response " << errno << std::endl;
+            return EXIT_FAILURE;   
+        }
+
+        return EXIT_SUCCESS;
+    }
     
     // PATHS
-    if (path == "/") { path = "/index.html"; }
     if (path == "/api/user-agent") 
     {
         std::string searchKey = "User-Agent: ";
@@ -119,7 +174,7 @@ int HttpServer::handleRequest(int clientSocket)
         header += "Content-Type: text/plain; charset=utf-8\r\n";
         header += "Content-Length: " + std::to_string(response.size()) + "\r\n";
         header += "\r\n";
-
+        
         // send response
         int headerBytesSent = send(clientSocket, header.c_str(), header.size(), 0);
         if (headerBytesSent == -1)
@@ -127,7 +182,7 @@ int HttpServer::handleRequest(int clientSocket)
             std::cerr << "Error while returning response " << errno << std::endl;
             return EXIT_FAILURE;
         }
-
+        
         int dataBytesSent = send(clientSocket, response.data(), response.size(), 0);    
         if (dataBytesSent == -1)
         {
@@ -136,6 +191,7 @@ int HttpServer::handleRequest(int clientSocket)
         }
         return EXIT_SUCCESS;
     }
+    if (path == "/") { path = "/index.html"; }
     std::string localPath = path.substr(1); // Gets a substring starting at index 1 (i.e, eliminates the backslash)
     
 
