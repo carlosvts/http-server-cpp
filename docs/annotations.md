@@ -9,7 +9,7 @@ Example: 192.168.1.255:3389 (IP + Port) via TCP/UDP
 The OS uses this information wrapped by the socket to send and receive data.
 The connection occours using a Socket 5-tuple
 {protocol, local-ip, local-port, remote-ip, remote-port}
-Example: {tcp, 130.254.2.11, 8080, 130.290.3.10, 1029}
+Example: {tcp, 130.254.2.11, 8080, 130.290.3.10, 1023}
 
 Inside our computer, we use Unix Domain Sockets (UDS) to communicate between files and process inside or own machine, bypassing network layer
 
