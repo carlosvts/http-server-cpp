@@ -29,3 +29,8 @@ Inside our computer, we use Unix Domain Sockets (UDS) to communicate between fil
 ## How does a Http connection work?
 A http connection works like a conversation where sockets "guards" the place that you are trying to go and talk to
 First you need a outer socket that will `listen` to any requests of talking. When he listens, he them creates another socket (i will call `newsckt`) to estabilish the communication between the request and the proccess of the computer, like a httpResponse. The outer socket will still be there waiting for other people that wants to start a conversation (that in TCP is a three way handshake). If any other exists: he creates another `newsckt` to intermediate the conversation. The guard socket will keep adding people to the `Backlog`  only when its ready that a new instance of socket is created by the OS.
+
+# Another topics
+
+## Multithreading
+
