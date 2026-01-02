@@ -44,6 +44,29 @@ g++ main.cpp server.cpp -o httpserver
 example: ./httpserver 8080
 * **Reminder:** Ports from 0 to 1023 may be blocked by the OS and need admin/root permissions.
 
+* You can access the server at http://localhost:8080
+### Static Files
+* **Path:** `/` or `/index.html`
+* **Description:** Serves the main HTML interface. It includes the CSS styling and the interactive form used to test POST requests.
+* **Method:** `GET`
+
+### Echo Service
+* **Path:** `/api/echo`
+* **Description:** A diagnostic tool that returns the **entire raw HTTP request** sent by the client.It is wrapped in `<pre>` tags to preserve formatting.
+* **Method:** `GET`
+
+### User-Agent Inspector
+* **Path:** `/api/user-agent`
+* **Description:** Parses the request headers and extracts the `User-Agent` string, identifying which browser or tool is accessing the server.
+* **Method:** `GET`
+
+### Personal Salute
+* **Path:** `/api/salute`
+* **Description:** Greets the user based on URL query parameters.
+* **Example:** `/api/salute?name=John&age=38`
+* **Output:** Displays a header with "Hello John! Your age is: 38".
+* **Method:** `GET`
+
 ## Project Structure
 ``` Markdown
 📁 Project
