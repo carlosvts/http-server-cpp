@@ -1,7 +1,10 @@
 #include "server.hpp"
+#include <cerrno>
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <sstream>
+#include <string>
 #include <thread>
 
 HttpServer::HttpServer(const std::string &PORT) { M_PORT = PORT; }
@@ -89,61 +92,99 @@ int HttpServer::handleRequest(int clientSocket) {
     std::string method, path, protocol;
     //  operator>> stops on spaces, so this work
     ss >> method >> path >> protocol;
-
-    // if has a questionmark, we can check
-    size_t questionMark = path.find("?");
-    // Make a route cutting until it sees the questionmark
-    std::string routedPath = path.substr(0, questionMark);
-    if (routedPath == "/api/salute") {
-        // GET api/salute?name=Foo&age=Bar HTTP/1.1\r\n ...
-        // path api/salute?name=Foo&age=Bar
-        std::string name = "User";
+    
+    // -------------------------------------
+    // HTTP POST LOGIC
+    // POST /api/save-name HTTP/1.1
+    // Host: localhost:8080
+    // Content-Length: 15
+    // Content-Type: application/x-www-form-urlencoded
+    // name=Duck&agee=2
+    // -------------------------------------
+    if (method == "POST")
+    {
+        std::string boundary = "\r\n\r\n";
+        size_t bodyPos = request.find(boundary);
+        std::string name = "Unknown";
         std::string age = "Unknown";
-        if (questionMark != std::string::npos) {
-        std::string queryParams = path.substr(
-            questionMark + 1); // substring at index of ? + 1 ie name=Foo&age=Bar
-        std::stringstream queryss(queryParams);
-        std::string slice;
-        while (std::getline(queryss, slice, '&')) {
-            size_t sep = slice.find('=');
-                if (sep != std::string::npos) {
-                    std::string key = slice.substr(0, sep);
-                if (key == "name") {
-                    name = slice.substr(sep + 1);
-                } 
-                else if (key == "age") {
-                    age = slice.substr(sep + 1);
+
+        if (bodyPos != std::string::npos)
+        {
+            std::string body = request.substr(bodyPos + boundary.length());
+            std::stringstream ssbody(body);
+            std::string segment; 
+
+            while (std::getline(ssbody, segment, '&'))
+            {
+                size_t sep = segment.find('=');
+                if (sep != std::string::npos)
+                {
+                    std::string key = segment.substr(0, sep);
+                    if (key == "name")
+                    {
+                        name = segment.substr(sep + 1);
+                    }
+                    else if (key == "age")
+                    {
+                        age = segment.substr(sep + 1);
+                    }
                 }
             }
-        }
-    }
-        std::string header = "HTTP/1.1 200 OK\r\n";
-        // std::string body = name + age;
-        std::string responseBody =
-            "<h1> Hello " + name + "!<br> Your age is: " + age + "</h1>";
-        header += "Content-Type: text/html; charset=utf-8\r\n";
-        header += "Content-Length: " + std::to_string(responseBody.size()) + "\r\n";
-        header += "\r\n";
 
-        int saluteHeaderBytesSent =
-            send(clientSocket, header.c_str(), header.size(), 0);
-        if (saluteHeaderBytesSent == -1) {
-        std::cerr << "Error while returning response " << errno << std::endl;
-            close(clientSocket);
-        return EXIT_FAILURE;
         }
-        int saluteBodyBytesSent =
-            send(clientSocket, responseBody.c_str(), responseBody.size(), 0);
-        if (saluteBodyBytesSent == -1) {
-        std::cerr << "Error while returning response " << errno << std::endl;
+        // Simple and poorly html
+        std::string htmlResponse = "<html><body><h1>Dados Recebidos!</h1>";
+        htmlResponse += "<p>Nome: " + name + "</p>";
+        htmlResponse += "<p>Idade: " + age + "</p>";
+        htmlResponse += "<a href='/'>Back</a></body></html>";
+
+        // HTTP header
+        std::string header = "HTTP/1.1 200 OK\r\n";
+        header += "Content-Type: text/html; charset=utf-8\r\n";
+        header += "Content-Length: " + std::to_string(htmlResponse.size()) + "\r\n";
+        header += "Connection: close\r\n"; 
+        header += "\r\n"; 
+
+        
+        int headerBytes = send(clientSocket, header.c_str(), header.size(), 0);
+        int htmlBytes = send(clientSocket, htmlResponse.c_str(), htmlResponse.size(), 0);
+        
+        if (headerBytes == -1 || htmlBytes == -1)
+        {
+            std::cerr << "Error whiling sending http response to POST method: " << errno << std::endl;
             close(clientSocket);
-        return EXIT_FAILURE;
+            return EXIT_FAILURE;
         }
+    
+        close(clientSocket);
+    }
+
+    // PATHS
+    if (path == "/api/echo")
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        std::string responseBody = "<html><body><h1> ECHO Response </h1><pre>";
+        responseBody += request;
+        responseBody += "</pre></body></html>";
+        
+        std::string header = "HTTP/1.1 200 OK \r\n";
+        header += "Content-Type: text/html; charset=utf-8\r\n";
+        header += "Content-Length: " + std::to_string(responseBody.size()) + "\r\n\r\n";
+
+        int headerBytesSent = send(clientSocket, header.c_str(), header.size(), 0);
+        int responseBytesSent = send(clientSocket, responseBody.c_str(), responseBody.size(), 0);
+
+        if (headerBytesSent == -1 || responseBytesSent == -1)
+        {
+            std::cerr << "Error while sending /api/echo response: " << errno << std::endl;
+            close(clientSocket);
+            return EXIT_FAILURE;
+        }
+
         close(clientSocket);
         return EXIT_SUCCESS;
     }
 
-    // PATHS
     if (path == "/api/user-agent") {
         std::string searchKey = "User-Agent: ";
         std::string userAgent;
@@ -178,6 +219,7 @@ int HttpServer::handleRequest(int clientSocket) {
     close(clientSocket);
     return EXIT_SUCCESS;
     }
+
     if (path == "/") {
         path = "/index.html";
     }
@@ -240,8 +282,7 @@ int HttpServer::handleRequest(int clientSocket) {
         return EXIT_FAILURE;
     }
 
-    int dataBytesSent =
-        send(clientSocket, fileBuffer.data(), fileBuffer.size(), 0);
+    int dataBytesSent = send(clientSocket, fileBuffer.data(), fileBuffer.size(), 0);
     if (dataBytesSent == -1) {
         std::cerr << "Error while returning response " << errno << std::endl;
         close(clientSocket);
@@ -249,7 +290,63 @@ int HttpServer::handleRequest(int clientSocket) {
     }
         close(clientSocket);
         return EXIT_SUCCESS;
-}
+
+    // if has a questionmark, we can check
+    size_t questionMark = path.find("?");
+    // Make a route cutting until it sees the questionmark
+    std::string routedPath = path.substr(0, questionMark);
+
+    if (routedPath == "/api/salute") {
+        // GET api/salute?name=Foo&age=Bar HTTP/1.1\r\n ...
+        // path api/salute?name=Foo&age=Bar
+        std::string name = "User";
+        std::string age = "Unknown";
+        if (questionMark != std::string::npos) {
+        std::string queryParams = path.substr(
+            questionMark + 1); // substring at index of ? + 1 ie name=Foo&age=Bar
+        std::stringstream queryss(queryParams);
+        std::string slice;
+        while (std::getline(queryss, slice, '&')) {
+            size_t sep = slice.find('=');
+                if (sep != std::string::npos) {
+                    std::string key = slice.substr(0, sep);
+                if (key == "name") {
+                    name = slice.substr(sep + 1);
+                } 
+                else if (key == "age") {
+                    age = slice.substr(sep + 1);
+                }
+            }
+        }
+    }
+        std::string header = "HTTP/1.1 200 OK\r\n";
+        // std::string body = name + age;
+        std::string responseBody =
+            "<h1> Hello " + name + "!<br> Your age is: " + age + "</h1>";
+        header += "Content-Type: text/html; charset=utf-8\r\n";
+        header += "Content-Length: " + std::to_string(responseBody.size()) + "\r\n";
+        header += "\r\n";
+
+        int saluteHeaderBytesSent =
+            send(clientSocket, header.c_str(), header.size(), 0);
+        if (saluteHeaderBytesSent == -1) {
+        std::cerr << "Error while returning response " << errno << std::endl;
+            close(clientSocket);
+        return EXIT_FAILURE;
+        }
+        int saluteBodyBytesSent =
+            send(clientSocket, responseBody.c_str(), responseBody.size(), 0);
+        if (saluteBodyBytesSent == -1) {
+        std::cerr << "Error while returning response " << errno << std::endl;
+            close(clientSocket);
+        return EXIT_FAILURE;
+        }
+        close(clientSocket);
+        return EXIT_SUCCESS;
+    }
+    return EXIT_SUCCESS;
+} 
+
 
 int HttpServer::run() {
   // main loop
@@ -273,7 +370,7 @@ int HttpServer::run() {
         // pass classe methods, this pointer and the variable
         std::thread worker(&HttpServer::handleRequest, this, newSckt);
         worker.detach();
-  }
+    }
 
   return EXIT_SUCCESS;
 }
