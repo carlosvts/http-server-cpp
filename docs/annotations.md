@@ -36,3 +36,4 @@ First you need a outer socket that will `listen` to any requests of talking. Whe
 Is a technicque that allows the computer to perform multiple tasks at the same time (concurrently). In the context of a HTTP Server, we can use it to manage multiple inner sockets, allowing more connections and issues with laging.
 
 In C++ content, we need to include <threads>
+More on: https://en.cppreference.com/w/cpp/thread.html.
