@@ -76,3 +76,7 @@ example: ./httpserver 8080
 ├── 📄 index.html      # Frontend interface with a POST form for testing
 └── 📄 Makefile        # Automated build script
 ```
+
+## Reminder
+This project is under development and was made only for learning porpouses, this code should not be used in any place that needs a real HTTP server since it doesnt have security measures yet.
+I will revisit this project on and so on to improving it when i have the necessity to learn new things related to that.
