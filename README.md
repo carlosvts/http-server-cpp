@@ -74,7 +74,6 @@ example: ./httpserver 8080
 ├── 📄 server.cpp      # Implementation of routing logic, GET/POST handling, and Sockets
 ├── 📄 server.hpp      # HttpServer class definition and data structures
 ├── 📄 index.html      # Frontend interface with a POST form for testing
-└── 📄 Makefile        # Automated build script
 ```
 
 ## Reminder
